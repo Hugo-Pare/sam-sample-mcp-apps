@@ -1,145 +1,155 @@
 import express from 'express';
-import { validateApiKey, checkToolPermission, checkResourcePermission, UnauthorizedError, ForbiddenError, extractApiKey, } from './auth.js';
+import { validateApiKey, checkToolPermission, checkResourcePermission, UnauthorizedError, ForbiddenError, extractApiKey, TOOL_PERMISSIONS, RESOURCE_PERMISSIONS, } from './auth.js';
 import { getAllDashboards, createDashboard, getMetric, executeQuery, getReportTemplates, generateReport, getSampleDataset, exportData, listUsers, createUser, revokeUser, } from './metrics-data.js';
 const app = express();
 app.use(express.json());
-async function handleToolsList() {
-    return {
-        tools: [
-            {
-                name: 'get_metrics',
-                description: 'Retrieve specific metrics data by metric ID. Returns current value, trends, and comparisons. (viewer+)',
-                inputSchema: {
-                    type: 'object',
-                    properties: {
-                        metricId: {
-                            type: 'string',
-                            description: 'Metric ID (e.g., revenue_mrr, users_dau, perf_response_time)',
-                        },
-                        timeRange: {
-                            type: 'string',
-                            description: 'Optional time range (e.g., 7d, 30d, 12m)',
-                        },
+async function handleToolsList(authContext) {
+    // Define all available tools
+    const allTools = [
+        {
+            name: 'get_metrics',
+            description: 'Retrieve specific metrics data by metric ID. Returns current value, trends, and comparisons. (viewer+)',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    metricId: {
+                        type: 'string',
+                        description: 'Metric ID (e.g., revenue_mrr, users_dau, perf_response_time)',
                     },
-                    required: ['metricId'],
-                },
-            },
-            {
-                name: 'list_dashboards',
-                description: 'List all available analytics dashboards with metadata. (viewer+)',
-                inputSchema: {
-                    type: 'object',
-                    properties: {
-                        category: {
-                            type: 'string',
-                            description: 'Optional category filter (finance, users, performance, executive)',
-                        },
+                    timeRange: {
+                        type: 'string',
+                        description: 'Optional time range (e.g., 7d, 30d, 12m)',
                     },
                 },
+                required: ['metricId'],
             },
-            {
-                name: 'create_dashboard',
-                description: 'Create a custom analytics dashboard. Requires analyst or admin role. (analyst+)',
-                inputSchema: {
-                    type: 'object',
-                    properties: {
-                        name: {
-                            type: 'string',
-                            description: 'Dashboard name',
-                        },
-                        widgets: {
-                            type: 'array',
-                            description: 'Array of widget configurations',
-                        },
+        },
+        {
+            name: 'list_dashboards',
+            description: 'List all available analytics dashboards with metadata. (viewer+)',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    category: {
+                        type: 'string',
+                        description: 'Optional category filter (finance, users, performance, executive)',
                     },
-                    required: ['name', 'widgets'],
                 },
             },
-            {
-                name: 'run_query',
-                description: 'Execute analytics query on metrics data. Returns query results with data array. (viewer+)',
-                inputSchema: {
-                    type: 'object',
-                    properties: {
-                        query: {
-                            type: 'string',
-                            description: 'Query string (SQL-like syntax)',
-                        },
-                        parameters: {
-                            type: 'object',
-                            description: 'Optional query parameters',
-                        },
+        },
+        {
+            name: 'create_dashboard',
+            description: 'Create a custom analytics dashboard. Requires analyst or admin role. (analyst+)',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: {
+                        type: 'string',
+                        description: 'Dashboard name',
                     },
-                    required: ['query'],
+                    widgets: {
+                        type: 'array',
+                        description: 'Array of widget configurations',
+                    },
                 },
+                required: ['name', 'widgets'],
             },
-            {
-                name: 'get_report',
-                description: 'Generate analytics report from template. Returns formatted report. (viewer+)',
-                inputSchema: {
-                    type: 'object',
-                    properties: {
-                        reportType: {
-                            type: 'string',
-                            description: 'Report template ID or name',
-                        },
-                        dateRange: {
-                            type: 'object',
-                            description: 'Date range with start and end dates',
-                            properties: {
-                                start: { type: 'string' },
-                                end: { type: 'string' },
-                            },
+        },
+        {
+            name: 'run_query',
+            description: 'Execute analytics query on metrics data. Returns query results with data array. (viewer+)',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    query: {
+                        type: 'string',
+                        description: 'Query string (SQL-like syntax)',
+                    },
+                    parameters: {
+                        type: 'object',
+                        description: 'Optional query parameters',
+                    },
+                },
+                required: ['query'],
+            },
+        },
+        {
+            name: 'get_report',
+            description: 'Generate analytics report from template. Returns formatted report. (viewer+)',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    reportType: {
+                        type: 'string',
+                        description: 'Report template ID or name',
+                    },
+                    dateRange: {
+                        type: 'object',
+                        description: 'Date range with start and end dates',
+                        properties: {
+                            start: { type: 'string' },
+                            end: { type: 'string' },
                         },
                     },
                     required: ['reportType', 'dateRange'],
                 },
             },
-            {
-                name: 'export_data',
-                description: 'Export metrics data in various formats (CSV, JSON, XLSX). Requires analyst or admin role. (analyst+)',
-                inputSchema: {
-                    type: 'object',
-                    properties: {
-                        metricIds: {
-                            type: 'array',
-                            description: 'Array of metric IDs to export',
-                            items: { type: 'string' },
-                        },
-                        format: {
-                            type: 'string',
-                            description: 'Export format',
-                            enum: ['csv', 'json', 'xlsx'],
-                        },
+        },
+        {
+            name: 'export_data',
+            description: 'Export metrics data in various formats (CSV, JSON, XLSX). Requires analyst or admin role. (analyst+)',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    metricIds: {
+                        type: 'array',
+                        description: 'Array of metric IDs to export',
+                        items: { type: 'string' },
                     },
-                    required: ['metricIds', 'format'],
-                },
-            },
-            {
-                name: 'manage_users',
-                description: 'Manage API keys and user permissions. Admin only. (admin)',
-                inputSchema: {
-                    type: 'object',
-                    properties: {
-                        action: {
-                            type: 'string',
-                            description: 'Action to perform',
-                            enum: ['list', 'create', 'revoke'],
-                        },
-                        userId: {
-                            type: 'string',
-                            description: 'User ID (required for create/revoke)',
-                        },
-                        role: {
-                            type: 'string',
-                            description: 'Role for new user (required for create)',
-                            enum: ['viewer', 'analyst', 'admin'],
-                        },
+                    format: {
+                        type: 'string',
+                        description: 'Export format',
+                        enum: ['csv', 'json', 'xlsx'],
                     },
-                    required: ['action'],
                 },
+                required: ['metricIds', 'format'],
             },
-        ],
+        },
+        {
+            name: 'manage_users',
+            description: 'Manage API keys and user permissions. Admin only. (admin)',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    action: {
+                        type: 'string',
+                        description: 'Action to perform',
+                        enum: ['list', 'create', 'revoke'],
+                    },
+                    userId: {
+                        type: 'string',
+                        description: 'User ID (required for create/revoke)',
+                    },
+                    role: {
+                        type: 'string',
+                        description: 'Role for new user (required for create)',
+                        enum: ['viewer', 'analyst', 'admin'],
+                    },
+                },
+                required: ['action'],
+            },
+        },
+    ];
+    // Filter tools based on user's role permissions
+    const filteredTools = allTools.filter((tool) => {
+        const allowedRoles = TOOL_PERMISSIONS.get(tool.name);
+        if (!allowedRoles) {
+            return false;
+        }
+        return allowedRoles.includes(authContext.role);
+    });
+    return {
+        tools: filteredTools,
     };
 }
 async function handleToolCall(params, authContext) {
@@ -244,28 +254,38 @@ async function handleToolCall(params, authContext) {
             throw new Error(`Unknown tool: ${name}`);
     }
 }
-async function handleResourcesList() {
+async function handleResourcesList(authContext) {
+    // Define all available resources
+    const allResources = [
+        {
+            uri: 'metrics://dashboards/all',
+            name: 'All Dashboards',
+            description: 'Complete list of available analytics dashboards with metadata (viewer+)',
+            mimeType: 'application/json',
+        },
+        {
+            uri: 'metrics://templates/reports',
+            name: 'Report Templates',
+            description: 'Pre-configured report templates for common analytics scenarios (viewer+)',
+            mimeType: 'application/json',
+        },
+        {
+            uri: 'metrics://data/sample',
+            name: 'Sample Dataset',
+            description: 'Sample analytics dataset for testing queries and dashboards (analyst+)',
+            mimeType: 'application/json',
+        },
+    ];
+    // Filter resources based on user's role permissions
+    const filteredResources = allResources.filter((resource) => {
+        const allowedRoles = RESOURCE_PERMISSIONS.get(resource.uri);
+        if (!allowedRoles) {
+            return false;
+        }
+        return allowedRoles.includes(authContext.role);
+    });
     return {
-        resources: [
-            {
-                uri: 'metrics://dashboards/all',
-                name: 'All Dashboards',
-                description: 'Complete list of available analytics dashboards with metadata (viewer+)',
-                mimeType: 'application/json',
-            },
-            {
-                uri: 'metrics://templates/reports',
-                name: 'Report Templates',
-                description: 'Pre-configured report templates for common analytics scenarios (viewer+)',
-                mimeType: 'application/json',
-            },
-            {
-                uri: 'metrics://data/sample',
-                name: 'Sample Dataset',
-                description: 'Sample analytics dataset for testing queries and dashboards (analyst+)',
-                mimeType: 'application/json',
-            },
-        ],
+        resources: filteredResources,
     };
 }
 async function handleResourceRead(params, authContext) {
@@ -364,7 +384,9 @@ app.post('/mcp', async (req, res) => {
                     };
                     break;
                 case 'tools/list':
-                    result = await handleToolsList();
+                    if (!authContext)
+                        throw new UnauthorizedError('Authentication required');
+                    result = await handleToolsList(authContext);
                     break;
                 case 'tools/call':
                     if (!authContext)
@@ -372,7 +394,9 @@ app.post('/mcp', async (req, res) => {
                     result = await handleToolCall(request.params, authContext);
                     break;
                 case 'resources/list':
-                    result = await handleResourcesList();
+                    if (!authContext)
+                        throw new UnauthorizedError('Authentication required');
+                    result = await handleResourcesList(authContext);
                     break;
                 case 'resources/read':
                     if (!authContext)

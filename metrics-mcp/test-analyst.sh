@@ -10,58 +10,74 @@ echo "║   MetricsHub - Testing Analyst Role (Read+Write)      ║"
 echo "╚════════════════════════════════════════════════════════╝"
 echo ""
 
-echo "1. Get Metrics (should SUCCEED) ✓"
+echo "1. List Tools (should return 6 analyst tools) ✓"
 curl -s -X POST "$URL" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_metrics","arguments":{"metricId":"users_dau"}}}' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+  | jq '.result.tools | {count: length, names: map(.name)}'
+echo ""
+
+echo "2. List Resources (should return all 3 resources) ✓"
+curl -s -X POST "$URL" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"resources/list"}' \
+  | jq '.result.resources | {count: length, uris: map(.uri)}'
+echo ""
+
+echo "3. Get Metrics (should SUCCEED) ✓"
+curl -s -X POST "$URL" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_metrics","arguments":{"metricId":"users_dau"}}}' \
   | jq '.result.content[0].text | fromjson | {id, name, value}'
 echo ""
 
-echo "2. Create Dashboard (should SUCCEED) ✓"
+echo "4. Create Dashboard (should SUCCEED) ✓"
 curl -s -X POST "$URL" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_dashboard","arguments":{"name":"Analyst Dashboard","widgets":[{"id":"w1","type":"chart","title":"Revenue"}]}}}' \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"create_dashboard","arguments":{"name":"Analyst Dashboard","widgets":[{"id":"w1","type":"chart","title":"Revenue"}]}}}' \
   | jq '.result.content[0].text | fromjson | {id, name, createdBy}'
 echo ""
 
-echo "3. Export Data (should SUCCEED) ✓"
+echo "5. Export Data (should SUCCEED) ✓"
 curl -s -X POST "$URL" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"export_data","arguments":{"metricIds":["revenue_mrr","users_mau"],"format":"json"}}}' \
+  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"export_data","arguments":{"metricIds":["revenue_mrr","users_mau"],"format":"json"}}}' \
   | jq '.result.content[0].text | fromjson | {format, filename, size}'
 echo ""
 
-echo "4. Run Query (should SUCCEED) ✓"
+echo "6. Run Query (should SUCCEED) ✓"
 curl -s -X POST "$URL" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"run_query","arguments":{"query":"SELECT * FROM metrics WHERE category = revenue"}}}' \
+  -d '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"run_query","arguments":{"query":"SELECT * FROM metrics WHERE category = revenue"}}}' \
   | jq '.result.content[0].text | fromjson | {rowCount, executionTime}'
 echo ""
 
-echo "5. Read Restricted Resource (should SUCCEED) ✓"
+echo "7. Read Restricted Resource (should SUCCEED) ✓"
 curl -s -X POST "$URL" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d '{"jsonrpc":"2.0","id":5,"method":"resources/read","params":{"uri":"metrics://data/sample"}}' \
+  -d '{"jsonrpc":"2.0","id":7,"method":"resources/read","params":{"uri":"metrics://data/sample"}}' \
   | jq '.result.contents[0].text | fromjson | {name, records}'
 echo ""
 
-echo "6. Manage Users (should FAIL - 403) ✗"
+echo "8. Manage Users (should FAIL - 403) ✗"
 curl -s -X POST "$URL" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"manage_users","arguments":{"action":"list"}}}' \
+  -d '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"manage_users","arguments":{"action":"list"}}}' \
   | jq '.error.message'
 echo ""
 
-echo "7. Test Query Parameter Auth (should SUCCEED) ✓"
+echo "9. Test Query Parameter Auth (should SUCCEED) ✓"
 curl -s -X POST "$URL?apiKey=$API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"get_metrics","arguments":{"metricId":"perf_uptime"}}}' \
+  -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"get_metrics","arguments":{"metricId":"perf_uptime"}}}' \
   | jq '.result.content[0].text | fromjson | .name'
 echo ""
 
