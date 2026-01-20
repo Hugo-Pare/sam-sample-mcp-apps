@@ -89,6 +89,51 @@ Admin:      admin / admin123       (full access)
 
 ---
 
+### 4. BankingFlow (OAuth 2.0 with PKCE)
+**Location**: [banking-mcp/](banking-mcp/)
+
+Comprehensive banking platform with OAuth 2.0 Authorization Code Grant + PKCE and Dynamic Client Registration (RFC 7591).
+
+**Features**:
+- **OAuth 2.0 Authorization Code Grant + PKCE** (RFC 7636)
+- **Dynamic Client Registration** (RFC 7591)
+- **Token Revocation** (RFC 7009)
+- **Scope-Based Permissions** (accounts:read, transactions:read, payments:write, profile:read)
+- **Multiple Client Authentication Methods** (Basic Auth, POST body, public clients)
+- **JWT Access Tokens** with refresh tokens
+- **Consolidated Architecture** - OAuth + MCP on port 6001
+- SSE transport on port 6000
+- HTTP transport on port 6001 (includes OAuth endpoints)
+- 6 banking tools
+- 3 resources with scope-based permissions
+- 3 prompts
+
+**Demo Users**:
+```
+user_basic:        accounts:read, profile:read
+user_transactions: accounts:read, transactions:read, profile:read
+user_full:         All scopes (full access)
+```
+
+**OAuth Flow**:
+```
+1. Register client via /oauth/register
+2. Get authorization code via /oauth/authorize
+3. Exchange code for access token via /oauth/token
+4. Use Bearer token to access banking APIs
+```
+
+**Use Cases**:
+- Banking and financial applications
+- OAuth 2.0 server implementations
+- Applications requiring dynamic client registration
+- Scope-based permission systems
+- Secure third-party API access
+
+[View Documentation →](banking-mcp/README.md)
+
+---
+
 ## Quick Start
 
 ### WeatherFlow (No Auth)
@@ -179,20 +224,69 @@ curl -u agent1:pass123 -X POST http://localhost:5001/mcp \
   }'
 ```
 
+### BankingFlow (OAuth 2.0)
+
+```bash
+cd banking-mcp
+npm install
+npm run build
+
+# Start HTTP server (includes OAuth endpoints)
+npm run start:http
+
+# Or start SSE server
+npm run start
+```
+
+Test OAuth flow:
+```bash
+# 1. Register a client
+curl -X POST http://localhost:6001/oauth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_name": "Test App",
+    "redirect_uris": ["http://localhost:8080/callback"]
+  }'
+
+# 2. Get authorization (open in browser, select user_full)
+# http://localhost:6001/oauth/authorize?client_id=CLIENT_ID&redirect_uri=http://localhost:8080/callback&response_type=code&scope=accounts:read&state=test&code_challenge=CHALLENGE&code_challenge_method=S256
+
+# 3. Exchange code for token
+curl -X POST http://localhost:6001/oauth/token \
+  -u "CLIENT_ID:CLIENT_SECRET" \
+  -d "grant_type=authorization_code&code=CODE&redirect_uri=http://localhost:8080/callback&code_verifier=VERIFIER"
+
+# 4. Use the access token
+curl -X POST http://localhost:6001/mcp \
+  -H "Authorization: Bearer ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "get_accounts",
+      "arguments": {}
+    }
+  }'
+```
+
 ## Server Comparison
 
-| Feature | WeatherFlow | MetricsHub | SupportDesk |
-|---------|-------------|------------|-------------|
-| **Authentication** | None | API Key | Basic Auth (user/pass) |
-| **Authorization** | N/A | RBAC (3 tiers) | RBAC (3 tiers) |
-| **SSE Port** | 3000 | 4000 | 5000 |
-| **HTTP Port** | 3001 | 4001 | 5001 |
-| **Tools** | 5 | 7 | 10 |
-| **Resources** | 2 | 3 | 5 |
-| **Prompts** | 3 | 3 | 3 |
-| **Access Control** | Public | RBAC | RBAC |
-| **Error Codes** | 500 | 401, 403, 500 | 401, 403, 500 |
-| **Use Case** | Public APIs | Analytics/BI | Support/Helpdesk |
+| Feature | WeatherFlow | MetricsHub | SupportDesk | BankingFlow |
+|---------|-------------|------------|-------------|-------------|
+| **Authentication** | None | API Key | Basic Auth | OAuth 2.0 + PKCE |
+| **Authorization** | N/A | RBAC (3 tiers) | RBAC (3 tiers) | Scope-based |
+| **SSE Port** | 3000 | 4000 | 5000 | 6000 |
+| **HTTP Port** | 3001 | 4001 | 5001 | 6001 (+ OAuth) |
+| **Tools** | 5 | 7 | 10 | 6 |
+| **Resources** | 2 | 3 | 5 | 3 |
+| **Prompts** | 3 | 3 | 3 | 3 |
+| **Access Control** | Public | RBAC | RBAC | Scope-based |
+| **Token Type** | N/A | Static | N/A | JWT (access + refresh) |
+| **Dynamic Registration** | N/A | N/A | N/A | ✅ RFC 7591 |
+| **Error Codes** | 500 | 401, 403, 500 | 401, 403, 500 | 400, 401, 403, 500 |
+| **Use Case** | Public APIs | Analytics/BI | Support/Helpdesk | Banking/Finance |
 
 ## Transport Support
 
@@ -223,6 +317,17 @@ All servers support:
 - Authorization header: `Authorization: Basic base64(username:password)`
 - WWW-Authenticate header in 401 responses
 - User identity tracking
+
+### BankingFlow - OAuth 2.0 with PKCE
+- OAuth 2.0 Authorization Code Grant with PKCE (RFC 7636)
+- Dynamic Client Registration (RFC 7591)
+- Token Revocation (RFC 7009)
+- JWT access tokens with refresh tokens
+- Scope-based permissions (accounts:read, transactions:read, payments:write, profile:read)
+- Multiple client authentication methods (Basic Auth, POST body, public clients)
+- OIDC-like discovery endpoint (`.well-known/oauth-protected-resource`)
+- Authorization header: `Authorization: Bearer <jwt_token>`
+- Consolidated OAuth + MCP server on single port
 
 ## Testing
 
@@ -256,6 +361,26 @@ cd support-mcp
 ./test-unauthorized.sh # Auth failure scenarios
 ```
 
+### BankingFlow
+```bash
+cd banking-mcp
+
+# Test OAuth 2.0 flow
+# 1. Discovery
+curl http://localhost:6001/.well-known/oauth-protected-resource | jq .
+
+# 2. Register client
+curl -X POST http://localhost:6001/oauth/register \
+  -H "Content-Type: application/json" \
+  -d '{"client_name":"Test","redirect_uris":["http://localhost:8080/callback"]}'
+
+# 3. Full OAuth flow with PKCE (see README for complete examples)
+# - Generate PKCE challenge
+# - Authorization request (browser)
+# - Token exchange
+# - API calls with Bearer token
+```
+
 ## Architecture
 
 All servers follow a consistent architecture:
@@ -276,54 +401,9 @@ server-name/
 └── TESTING.md
 ```
 
-## Key Learnings
-
-### SSE Transport
-- **Must NOT use `express.json()`** middleware
-- SSE transport parses request body internally
-- Session management via Map<sessionId, transport>
-- Auth can be validated once at connection time
-
-### HTTP Transport
-- **Must use `express.json()`** for body parsing
-- Auth must be validated per request
-- Pass auth context to handler functions
-- Standard REST API patterns apply
-
-### MCP Request Handlers
-- Use schema-based handler registration
-- Return `{content: [], isError?: boolean}` format
-- Permission checks before execution
-- Clear error messages for auth/permission failures
-
 ## Completed Servers
 
 ✅ **WeatherFlow** - No authentication (public access)
 ✅ **MetricsHub** - API Key authentication with RBAC
 ✅ **SupportDesk** - Basic Authentication with RBAC
-
-## Future Servers
-
-Planned additional authentication patterns:
-
-1. **OAuth 2.0** - Token-based with refresh tokens
-2. **JWT** - Stateless token authentication
-3. **mTLS** - Certificate-based authentication
-4. **SAML** - Enterprise SSO
-5. **Multi-Factor** - Combined auth methods
-
-## Technology Stack
-
-- **MCP SDK**: @modelcontextprotocol/sdk v1.0.0
-- **Server Framework**: Express.js v4.18.2
-- **Language**: TypeScript 5.3.0
-- **Runtime**: Node.js 20+
-- **Protocol**: JSON-RPC 2.0
-
-## License
-
-MIT
-
-## Contributing
-
-These are sample MCP servers for demonstration and educational purposes. Feel free to use them as templates for your own MCP server implementations.
+✅ **BankingFlow** - OAuth 2.0 + PKCE with Dynamic Client Registration
