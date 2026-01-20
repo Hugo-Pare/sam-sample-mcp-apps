@@ -1,0 +1,36 @@
+{
+  "name": "banking-mcp",
+  "version": "1.0.0",
+  "description": "Banking MCP Server with OAuth 2.0 Authorization Code Grant + PKCE and Dynamic Client Registration",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:http": "node dist/streamable-http.js",
+    "dev": "tsc && node dist/index.js",
+    "dev:http": "tsc && node dist/streamable-http.js",
+    "watch": "tsc --watch"
+  },
+  "keywords": [
+    "mcp",
+    "oauth",
+    "oauth2",
+    "pkce",
+    "banking",
+    "dynamic-client-registration"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  }
+}
