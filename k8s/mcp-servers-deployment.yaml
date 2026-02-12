@@ -1,0 +1,215 @@
+---
+# Deployment for all three MCP servers in a single pod
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-servers
+  labels:
+    app: mcp-servers
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-servers
+  template:
+    metadata:
+      labels:
+        app: mcp-servers
+    spec:
+      containers:
+      # Weather MCP Server - No Authentication
+      - name: weather-mcp
+        image: 868978040651.dkr.ecr.us-east-1.amazonaws.com/sample-weather-mcp:0.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+          name: weather-sse
+          protocol: TCP
+        - containerPort: 3001
+          name: weather-http
+          protocol: TCP
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+      # Metrics MCP Server - API Key Authentication
+      - name: metrics-mcp
+        image: 868978040651.dkr.ecr.us-east-1.amazonaws.com/sample-metrics-mcp:0.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 4000
+          name: metrics-sse
+          protocol: TCP
+        - containerPort: 4001
+          name: metrics-http
+          protocol: TCP
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 4001
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 4001
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+      # Support MCP Server - Basic Authentication
+      - name: support-mcp
+        image: 868978040651.dkr.ecr.us-east-1.amazonaws.com/sample-support-mcp:0.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+          name: support-sse
+          protocol: TCP
+        - containerPort: 5001
+          name: support-http
+          protocol: TCP
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+---
+# Service exposing all SSE and HTTP ports
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-servers
+  labels:
+    app: mcp-servers
+spec:
+  selector:
+    app: mcp-servers
+  type: ClusterIP
+  ports:
+  # Weather MCP ports
+  - name: weather-sse
+    port: 3000
+    targetPort: 3000
+    protocol: TCP
+  - name: weather-http
+    port: 3001
+    targetPort: 3001
+    protocol: TCP
+
+  # Metrics MCP ports
+  - name: metrics-sse
+    port: 4000
+    targetPort: 4000
+    protocol: TCP
+  - name: metrics-http
+    port: 4001
+    targetPort: 4001
+    protocol: TCP
+
+  # Support MCP ports
+  - name: support-sse
+    port: 5000
+    targetPort: 5000
+    protocol: TCP
+  - name: support-http
+    port: 5001
+    targetPort: 5001
+    protocol: TCP
+
+---
+# NetworkPolicy to allow cross-namespace access
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-servers-allow-cross-namespace
+spec:
+  podSelector:
+    matchLabels:
+      app: mcp-servers
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow from all namespaces (adjust namespaceSelector for more security)
+  - from:
+    - namespaceSelector: {}
+    ports:
+    # Weather MCP
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 3001
+    # Metrics MCP
+    - protocol: TCP
+      port: 4000
+    - protocol: TCP
+      port: 4001
+    # Support MCP
+    - protocol: TCP
+      port: 5000
+    - protocol: TCP
+      port: 5001
+  # Allow from same namespace
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 3001
+    - protocol: TCP
+      port: 4000
+    - protocol: TCP
+      port: 4001
+    - protocol: TCP
+      port: 5000
+    - protocol: TCP
+      port: 5001
